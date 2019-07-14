@@ -4,6 +4,7 @@ import numpy as np
 
 from torch.autograd import Variable
 
+
 class VLSTMModel(nn.Module):
 
     def __init__(self, args, infer=False):
@@ -31,10 +32,9 @@ class VLSTMModel(nn.Module):
         self.embedding_size = args.embedding_size
         self.input_size = args.input_size
         self.output_size = args.output_size
-        self.maxNumPeds=args.maxNumPeds
-        self.seq_length=args.seq_length
+        self.maxNumPeds = args.maxNumPeds
+        self.seq_length = args.seq_length
         self.gru = args.gru
-
 
         # The LSTM cell
         self.cell = nn.LSTMCell(self.embedding_size, self.rnn_size)
@@ -42,9 +42,9 @@ class VLSTMModel(nn.Module):
         if self.gru:
             self.cell = nn.GRUCell(self.embedding_size, self.rnn_size)
 
-
         # Linear layer to embed the input position
-        self.input_embedding_layer = nn.Linear(self.input_size, self.embedding_size)
+        self.input_embedding_layer = nn.Linear(
+            self.input_size, self.embedding_size)
         # Linear layer to embed the social tensor
         #self.tensor_embedding_layer = nn.Linear(self.grid_size*self.grid_size, self.embedding_size)
 
@@ -54,10 +54,10 @@ class VLSTMModel(nn.Module):
         # ReLU and dropout unit
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(args.dropout)
-            
-    #def forward(self, input_data, grids, hidden_states, cell_states ,PedsList, num_pedlist,dataloader, look_up):
-    def forward(self, *args):
 
+    # def forward(self, input_data, grids, hidden_states, cell_states
+    # ,PedsList, num_pedlist,dataloader, look_up):
+    def forward(self, *args):
         '''
         Forward pass for the model
         params:
@@ -73,10 +73,10 @@ class VLSTMModel(nn.Module):
         cell_states
         '''
         # List of tensors each of shape args.maxNumPedsx3 corresponding to each frame in the sequence
-            # frame_data = tf.split(0, args.seq_length, self.input_data, name="frame_data")
+        # frame_data = tf.split(0, args.seq_length, self.input_data, name="frame_data")
         #frame_data = [torch.squeeze(input_, [0]) for input_ in torch.split(0, self.seq_length, input_data)]
-        
-        #print("***************************")
+
+        # print("***************************")
         #print("input data")
         # Construct the output variable
         input_data = args[0]
@@ -92,12 +92,13 @@ class VLSTMModel(nn.Module):
         look_up = args[6]
 
         numNodes = len(look_up)
-        outputs = Variable(torch.zeros(self.seq_length * numNodes, self.output_size))
-        if self.use_cuda:            
+        outputs = Variable(torch.zeros(
+            self.seq_length * numNodes, self.output_size))
+        if self.use_cuda:
             outputs = outputs.cuda()
 
         # For each frame in the sequence
-        for framenum,frame in enumerate(input_data):
+        for framenum, frame in enumerate(input_data):
 
             # Peds present in the current frame
 
@@ -106,53 +107,51 @@ class VLSTMModel(nn.Module):
 
             nodeIDs_boundary = num_pedlist[framenum]
             nodeIDs = [int(nodeID) for nodeID in PedsList[framenum]]
-            #print(PedsList)
+            # print(PedsList)
 
             if len(nodeIDs) == 0:
                 # If no peds, then go to the next frame
                 continue
-
 
             # List of nodes
             #print("lookup table :%s"% look_up)
             list_of_nodes = [look_up[x] for x in nodeIDs]
 
             corr_index = Variable((torch.LongTensor(list_of_nodes)))
-            if self.use_cuda:            
+            if self.use_cuda:
                 outputs = outputs.cuda()
             #print("list of nodes: %s"%nodeIDs)
             #print("trans: %s"%corr_index)
-            #if self.use_cuda:
+            # if self.use_cuda:
              #   list_of_nodes = list_of_nodes.cuda()
 
-
-            #print(list_of_nodes.data)
+            # print(list_of_nodes.data)
             # Select the corresponding input positions
-            nodes_current = frame[list_of_nodes,:]
+            nodes_current = frame[list_of_nodes, :]
             # Get the corresponding grid masks
 
-            
-
-
             # Get the corresponding hidden and cell states
-            hidden_states_current = torch.index_select(hidden_states, 0, corr_index)
+            hidden_states_current = torch.index_select(
+                hidden_states, 0, corr_index)
 
             if not self.gru:
-                cell_states_current = torch.index_select(cell_states, 0, corr_index)
-
+                cell_states_current = torch.index_select(
+                    cell_states, 0, corr_index)
 
             # Embed inputs
-            input_embedded = self.dropout(self.relu(self.input_embedding_layer(nodes_current)))
+            input_embedded = self.dropout(
+                self.relu(self.input_embedding_layer(nodes_current)))
 
             if not self.gru:
                 # One-step of the LSTM
-                h_nodes, c_nodes = self.cell(input_embedded, (hidden_states_current, cell_states_current))
+                h_nodes, c_nodes = self.cell(
+                    input_embedded, (hidden_states_current, cell_states_current))
             else:
                 h_nodes = self.cell(input_embedded, (hidden_states_current))
 
-
             # Compute the output
-            outputs[framenum*numNodes + corr_index.data] = self.output_layer(h_nodes)
+            outputs[framenum * numNodes +
+                    corr_index.data] = self.output_layer(h_nodes)
 
             # Update hidden and cell states
             hidden_states[corr_index.data] = h_nodes
@@ -160,11 +159,13 @@ class VLSTMModel(nn.Module):
                 cell_states[corr_index.data] = c_nodes
 
         # Reshape outputs
-        outputs_return = Variable(torch.zeros(self.seq_length, numNodes, self.output_size))
+        outputs_return = Variable(torch.zeros(
+            self.seq_length, numNodes, self.output_size))
         if self.use_cuda:
             outputs_return = outputs_return.cuda()
         for framenum in range(self.seq_length):
             for node in range(numNodes):
-                outputs_return[framenum, node, :] = outputs[framenum*numNodes + node, :]
+                outputs_return[framenum, node, :] = outputs[
+                    framenum * numNodes + node, :]
 
         return outputs_return, hidden_states, cell_states
